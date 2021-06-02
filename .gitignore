@@ -1,0 +1,17 @@
+*/bin/*
+*/obj/*
+*/*.suo
+*/.vs/*
+.vs/*
+bin
+obj
+*.user
+Release
+*/Release/*
+packages
+*/packages/*
+publish
+*/publish/*
+logs
+*/logs/*
+/*.log

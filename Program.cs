@@ -66,27 +66,15 @@ namespace AmexSmApiClientTest
 
         public static async Task<bool> SendRequestToSmApiAsync(string url, string resourcePath, string host, int port, string httpMethod, string payload, string nonce, string ts)
         {
-            // generate request headers
-            var headers = new Dictionary<string, string>();
-            headers.Add("x-amex-api-key", ClientKey);
-            headers.Add("x-amex-request-id", Guid.NewGuid().ToString());
-
-            string macAuth = GenerateMacHeader(ClientKey, ClientSecret, resourcePath, host, port, httpMethod, payload, nonce, ts);
-
-            headers.Add("Authorization", macAuth);
-
             // create request message
-            var request =
-                new HttpRequestMessage(HttpMethod.Post, url)
-                {
-                    Content = new StringContent(payload)
-                };
+            var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = new StringContent(payload) };
 
             // add headers to the request
-            foreach (var (key, value) in headers)
-            {
-                request.Headers.Add(key, value);
-            }
+            request.Headers.Add("x-amex-api-key", ClientKey);
+            request.Headers.Add("x-amex-request-id", Guid.NewGuid().ToString());
+
+            string macAuth = GenerateMacHeader(ClientKey, ClientSecret, resourcePath, host, port, httpMethod, payload, nonce, ts);
+            request.Headers.Add("Authorization", macAuth);
 
             if (request.Content.Headers.ContentType != null)
                 request.Content.Headers.ContentType.MediaType = "application/json";

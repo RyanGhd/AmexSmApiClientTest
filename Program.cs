@@ -4,6 +4,7 @@ using System.IO;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Threading.Tasks;
 
 namespace AmexSmApiClientTest
@@ -15,8 +16,8 @@ namespace AmexSmApiClientTest
         private static readonly string AUTH_HEADER_FORMAT =
             "MAC id=\"{0}\",ts=\"{1}\",nonce=\"{2}\",bodyhash=\"{3}\",mac=\"{4}\"";
 
-        private static string ClientKey = "fn8VtqnFhzKO5D8ZfdaP3tcJRbymGRyn"; // Insert Client Key Here
-        private static string ClientSecret = "1pJiFJ9PGgkeGyOEAiESmnhYGI68K79X"; // Insert Client Key Here
+        private static string ClientKey = "V1Jn8QQDeXp0oNnSgu5MN9eUFSmrvh8s"; // Insert Client Key Here
+        private static string ClientSecret = "G9jdPARgqeJpdqinKnMmnIGiddXYG1pm"; // Insert Client Key Here
 
         private static readonly HttpClient HttpClient = new HttpClient();
 
@@ -36,6 +37,7 @@ namespace AmexSmApiClientTest
             string nonce = Guid.NewGuid().ToString();
             string ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
             string macAuth = GenerateMacHeader(ClientKey, ClientSecret, resourcePath, host, port, httpMethod, payload, nonce, ts);
+            //string macAuth = GenerateMacTokenV2(requestUrl, httpMethod, payload, ClientKey, ClientSecret);
 
             Console.WriteLine("MacAuth token:");
             Console.WriteLine(macAuth);
@@ -63,6 +65,39 @@ namespace AmexSmApiClientTest
 
         }
 
+        public static String GenerateMacTokenV2(String requestUrl, String httpMethod, String requestBody, String apiKey, String secretkey)
+        {
+            String authToken = null;
+            String ts = DateTime.Now.Ticks.ToString(); // String.valueOf(System.currentTimeMillis());
+            String nonce = Guid.NewGuid().ToString();        //tosUUID.randomUUID().toString();
+            var url = new Uri(requestUrl);
+            String resourceUri = url.AbsolutePath;           // uri.getPath();
+            String query = "";                               // uri.getQuery();
+            if (!string.IsNullOrWhiteSpace(query)) resourceUri = resourceUri + "?" + query;   // if (query != null && !query.isEmpty()) resourceUri = resourceUri + "?" + query;
+
+            String host = url.Host.Trim().ToLower();          //uri.getHost().trim().toLowerCase();
+            int port = url.Port;                                            // uri.getPort() == -1 ? uri.toURL().getDefaultPort() : uri.getPort();
+
+            var mac = new HMACSHA256(Encoding.UTF8.GetBytes(secretkey));    // SecretKeySpec key = new SecretKeySpec(secretkey.getBytes("UTF-8"), "HmacSHA256");
+            mac.Initialize();                                               // Mac mac = Mac.getInstance("HmacSHA256");
+                                                                            // mac.init(key);
+
+            byte[] rawBodyHash = mac.ComputeHash(Encoding.UTF8.GetBytes(requestBody));    //byte[] rawBodyHash = mac.doFinal(requestBody.getBytes("UTF-8"));
+            string bodyHash = Convert.ToBase64String(rawBodyHash);                        //String bodyHash = new String(Base64.encodeBase64(rawBodyHash));
+            String macInput = ts + "\n" + nonce + "\n" + httpMethod + "\n" + resourceUri + "\n" + host + "\n" + port +
+                              "\n" + bodyHash + "\n";
+
+            byte[] signBytes = mac.ComputeHash(Encoding.UTF8.GetBytes(macInput));  // byte[] signBytes = mac.doFinal(macInput.getBytes());
+            string signature = Convert.ToBase64String(signBytes);      //String signature = new String(Base64.encodeBase64(signBytes));
+
+            String[] parameters = new String[] { "\"" + apiKey + "\"", "\"" + ts + "\"", "\"" + nonce + "\"", "\"" + signature + "\"", "\"" + bodyHash + "\"" };
+
+            String[] bodyInputs = new String[] { httpMethod, requestUrl, UrlEncoder.Default.Encode(requestBody) };    //String[] bodyInputs = new String[] { httpMethod, requestUrl, URLEncoder.encode(requestBody, "UTF-8") };
+            String macBody = string.Format("http_method={0}&url={1}&payload={2}", bodyInputs);
+            authToken = String.Format("MAC id={0},ts={1},nonce={2},bodyhash={4}, mac={3}", parameters);
+
+            return authToken;
+        }
 
         public static async Task<bool> SendRequestToSmApiAsync(string url, string resourcePath, string host, int port, string httpMethod, string payload, string nonce, string ts)
         {
@@ -74,6 +109,8 @@ namespace AmexSmApiClientTest
             request.Headers.Add("x-amex-request-id", Guid.NewGuid().ToString());
 
             string macAuth = GenerateMacHeader(ClientKey, ClientSecret, resourcePath, host, port, httpMethod, payload, nonce, ts);
+            // string macAuth = GenerateMacTokenV2(url,httpMethod,payload, ClientKey, ClientSecret);
+
             request.Headers.Add("Authorization", macAuth);
 
             if (request.Content.Headers.ContentType != null)

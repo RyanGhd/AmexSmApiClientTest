@@ -132,9 +132,15 @@
           "region_code": "New York",
           "postal_code": "85032",
           "country_code": "US"
-        }
+        },
+        "title": "MR."
       },
-      "title": "MR."
+      "sale": {
+        "channel_indicator_code": "DS",
+        "channel_name": "CN",
+        "represent_id": "36500",
+        "iso_register_number": "0000036500"
+      }
     }
   ]
 }

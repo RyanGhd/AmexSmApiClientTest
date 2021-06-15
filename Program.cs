@@ -11,7 +11,7 @@ namespace AmexSmApiClientTest
 {
     class Program
     {
-        private static readonly string SIGNATURE_FORMAT = "{0}\n{1}\n{2}\n{3}\n{4}\n{5}\n{6}\n ";
+        private static readonly string SIGNATURE_FORMAT = "{0}\n{1}\n{2}\n{3}\n{4}\n{5}\n{6}\n";
 
         private static readonly string AUTH_HEADER_FORMAT =
             "MAC id=\"{0}\",ts=\"{1}\",nonce=\"{2}\",bodyhash=\"{3}\",mac=\"{4}\"";

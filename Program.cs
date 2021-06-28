@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Threading.Tasks;
@@ -16,14 +18,16 @@ namespace AmexSmApiClientTest
         private static readonly string AUTH_HEADER_FORMAT =
             "MAC id=\"{0}\",ts=\"{1}\",nonce=\"{2}\",bodyhash=\"{3}\",mac=\"{4}\"";
 
-        private static string ClientKey = "V1Jn8QQDeXp0oNnSgu5MN9eUFSmrvh8s"; // Insert Client Key Here
-        private static string ClientSecret = "G9jdPARgqeJpdqinKnMmnIGiddXYG1pm"; // Insert Client Key Here
+        private static string ClientKey = "n3U6BKvHkTQ70FFFuA9XD5ZgY9bgogM7"; // Insert Client Key Here
+        private static string ClientSecret = "yHFfA3yRonNSWTzSMJXl5vbeYeYu3JtK"; // Insert Client Key Here
+        
+        private const string CertPath = @"c:\\temp\0\cert\cert.pem";
 
-        private static readonly HttpClient HttpClient = new HttpClient();
+        private static readonly HttpClient HttpClient = CreateHttpClient();
 
         static void Main(string[] args)
         {
-            string requestUrl = "https://api.qasb.americanexpress.com/sb/merchant/v1/acquisitions/sellers"; // APIGEE URL here
+            string requestUrl = "https://apigateway2sma-qa.americanexpress.com/sb/merchant/v1/acquisitions/sellers"; // APIGEE URL here
             Uri url = new Uri(requestUrl);
             string queryParams = ""; // Query Params needs to be specified in GETcall for HMAC.
 
@@ -65,40 +69,6 @@ namespace AmexSmApiClientTest
 
         }
 
-        public static String GenerateMacTokenV2(String requestUrl, String httpMethod, String requestBody, String apiKey, String secretkey)
-        {
-            String authToken = null;
-            String ts = DateTime.Now.Ticks.ToString(); // String.valueOf(System.currentTimeMillis());
-            String nonce = Guid.NewGuid().ToString();        //tosUUID.randomUUID().toString();
-            var url = new Uri(requestUrl);
-            String resourceUri = url.AbsolutePath;           // uri.getPath();
-            String query = "";                               // uri.getQuery();
-            if (!string.IsNullOrWhiteSpace(query)) resourceUri = resourceUri + "?" + query;   // if (query != null && !query.isEmpty()) resourceUri = resourceUri + "?" + query;
-
-            String host = url.Host.Trim().ToLower();          //uri.getHost().trim().toLowerCase();
-            int port = url.Port;                                            // uri.getPort() == -1 ? uri.toURL().getDefaultPort() : uri.getPort();
-
-            var mac = new HMACSHA256(Encoding.UTF8.GetBytes(secretkey));    // SecretKeySpec key = new SecretKeySpec(secretkey.getBytes("UTF-8"), "HmacSHA256");
-            mac.Initialize();                                               // Mac mac = Mac.getInstance("HmacSHA256");
-                                                                            // mac.init(key);
-
-            byte[] rawBodyHash = mac.ComputeHash(Encoding.UTF8.GetBytes(requestBody));    //byte[] rawBodyHash = mac.doFinal(requestBody.getBytes("UTF-8"));
-            string bodyHash = Convert.ToBase64String(rawBodyHash);                        //String bodyHash = new String(Base64.encodeBase64(rawBodyHash));
-            String macInput = ts + "\n" + nonce + "\n" + httpMethod + "\n" + resourceUri + "\n" + host + "\n" + port +
-                              "\n" + bodyHash + "\n";
-
-            byte[] signBytes = mac.ComputeHash(Encoding.UTF8.GetBytes(macInput));  // byte[] signBytes = mac.doFinal(macInput.getBytes());
-            string signature = Convert.ToBase64String(signBytes);      //String signature = new String(Base64.encodeBase64(signBytes));
-
-            String[] parameters = new String[] { "\"" + apiKey + "\"", "\"" + ts + "\"", "\"" + nonce + "\"", "\"" + signature + "\"", "\"" + bodyHash + "\"" };
-
-            String[] bodyInputs = new String[] { httpMethod, requestUrl, UrlEncoder.Default.Encode(requestBody) };    //String[] bodyInputs = new String[] { httpMethod, requestUrl, URLEncoder.encode(requestBody, "UTF-8") };
-            String macBody = string.Format("http_method={0}&url={1}&payload={2}", bodyInputs);
-            authToken = String.Format("MAC id={0},ts={1},nonce={2},bodyhash={4}, mac={3}", parameters);
-
-            return authToken;
-        }
-
         public static async Task<bool> SendRequestToSmApiAsync(string url, string resourcePath, string host, int port, string httpMethod, string payload, string nonce, string ts)
         {
             // create request message
@@ -107,6 +77,7 @@ namespace AmexSmApiClientTest
             // add headers to the request
             request.Headers.Add("x-amex-api-key", ClientKey);
             request.Headers.Add("x-amex-request-id", Guid.NewGuid().ToString());
+            request.Headers.Add("origin", "https://rapidpaylegal.com.au");
 
             string macAuth = GenerateMacHeader(ClientKey, ClientSecret, resourcePath, host, port, httpMethod, payload, nonce, ts);
             // string macAuth = GenerateMacTokenV2(url,httpMethod,payload, ClientKey, ClientSecret);
@@ -115,6 +86,12 @@ namespace AmexSmApiClientTest
 
             if (request.Content.Headers.ContentType != null)
                 request.Content.Headers.ContentType.MediaType = "application/json";
+
+            // add cert 
+            Console.WriteLine("----------------------------------");
+            Console.WriteLine(request.ToString());
+            Console.WriteLine("----------------------------------");
+            Console.WriteLine();
 
             // send the request
             using (var response = await HttpClient.SendAsync(request))
@@ -139,6 +116,33 @@ namespace AmexSmApiClientTest
                     return true;
                 }
 
+            }
+        }
+
+        private static HttpClient CreateHttpClient()
+        {
+            try
+            {
+                // System.Net.ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+
+                //var content = File.ReadAllText(CertPath);
+
+                //var contentByte = Convert.FromBase64String(File.ReadAllText(CertPath));
+
+                //File.WriteAllBytes(@"c:\\temp\0\cert\cert3.pem",  contentByte);
+                var cert = new X509Certificate2(X509Certificate2.CreateFromCertFile(CertPath));
+
+                var httpHandler = new HttpClientHandler();
+                httpHandler.ClientCertificates.Add(cert);
+
+                var httpClient = new HttpClient(httpHandler);
+
+                return httpClient;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
             }
         }
     }

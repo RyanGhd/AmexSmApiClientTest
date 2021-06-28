@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -23,8 +24,6 @@ namespace AmexSmApiClientTest
         
         private const string CertPath = @"c:\\temp\0\cert\cert.pem";
 
-        private static readonly HttpClient HttpClient = CreateHttpClient();
-
         static void Main(string[] args)
         {
             string requestUrl = "https://apigateway2sma-qa.americanexpress.com/sb/merchant/v1/acquisitions/sellers"; // APIGEE URL here
@@ -43,10 +42,12 @@ namespace AmexSmApiClientTest
             string macAuth = GenerateMacHeader(ClientKey, ClientSecret, resourcePath, host, port, httpMethod, payload, nonce, ts);
             //string macAuth = GenerateMacTokenV2(requestUrl, httpMethod, payload, ClientKey, ClientSecret);
 
-            Console.WriteLine("MacAuth token:");
-            Console.WriteLine(macAuth);
+            Console.WriteLine("Method 1 ---------------------------------------------------------------------------");
+            var result1 = SendRequestToSmApiAsync(requestUrl, resourcePath, host, port, httpMethod, payload, nonce, ts).Result;
 
-            var result = SendRequestToSmApiAsync(requestUrl, resourcePath, host, port, httpMethod, payload, nonce, ts).Result;
+            Console.WriteLine();
+            Console.WriteLine("Method 2 ---------------------------------------------------------------------------");
+            var result2 = SendRequestToSmApiUsingWebClientAsync(requestUrl, resourcePath, host, port, httpMethod, payload, nonce, ts).Result;
 
             Console.ReadKey();
         }
@@ -69,67 +70,35 @@ namespace AmexSmApiClientTest
 
         }
 
-        public static async Task<bool> SendRequestToSmApiAsync(string url, string resourcePath, string host, int port, string httpMethod, string payload, string nonce, string ts)
-        {
-            // create request message
-            var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = new StringContent(payload) };
-
-            // add headers to the request
-            request.Headers.Add("x-amex-api-key", ClientKey);
-            request.Headers.Add("x-amex-request-id", Guid.NewGuid().ToString());
-            request.Headers.Add("origin", "https://rapidpaylegal.com.au");
-
-            string macAuth = GenerateMacHeader(ClientKey, ClientSecret, resourcePath, host, port, httpMethod, payload, nonce, ts);
-            // string macAuth = GenerateMacTokenV2(url,httpMethod,payload, ClientKey, ClientSecret);
-
-            request.Headers.Add("Authorization", macAuth);
-
-            if (request.Content.Headers.ContentType != null)
-                request.Content.Headers.ContentType.MediaType = "application/json";
-
-            // add cert 
-            Console.WriteLine("----------------------------------");
-            Console.WriteLine(request.ToString());
-            Console.WriteLine("----------------------------------");
-            Console.WriteLine();
-
-            // send the request
-            using (var response = await HttpClient.SendAsync(request))
-            {
-                var content = await response.Content.ReadAsStringAsync();
-                var status = $"{(int)response.StatusCode}-{response.ReasonPhrase}";
-                if (!response.IsSuccessStatusCode)
-                {
-                    Console.WriteLine();
-                    Console.WriteLine();
-                    Console.WriteLine($"Request to Amex SM API failed.");
-                    Console.WriteLine($"url:{url}");
-                    Console.WriteLine($"status:{status}");
-                    Console.WriteLine($"content:{content}");
-                    return false;
-                }
-                else
-                {
-                    Console.WriteLine();
-                    Console.WriteLine();
-                    Console.WriteLine("Request to Amex SM API was successful!");
-                    return true;
-                }
-
-            }
-        }
-
-        private static HttpClient CreateHttpClient()
+        public static async Task<bool> SendRequestToSmApiAsync(string url, string resourcePath, string host, int port,
+            string httpMethod, string payload, string nonce, string ts)
         {
             try
             {
-                // System.Net.ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                // create request message
+                var request = new HttpRequestMessage(HttpMethod.Post, url) {Content = new StringContent(payload)};
 
-                //var content = File.ReadAllText(CertPath);
+                // add headers to the request
+                request.Headers.Add("x-amex-api-key", ClientKey);
+                request.Headers.Add("x-amex-request-id", Guid.NewGuid().ToString());
+                request.Headers.Add("origin", "https://rapidpaylegal.com.au");
 
-                //var contentByte = Convert.FromBase64String(File.ReadAllText(CertPath));
+                string macAuth = GenerateMacHeader(ClientKey, ClientSecret, resourcePath, host, port, httpMethod,
+                    payload, nonce, ts);
+                // string macAuth = GenerateMacTokenV2(url,httpMethod,payload, ClientKey, ClientSecret);
 
-                //File.WriteAllBytes(@"c:\\temp\0\cert\cert3.pem",  contentByte);
+                request.Headers.Add("Authorization", macAuth);
+
+                if (request.Content.Headers.ContentType != null)
+                    request.Content.Headers.ContentType.MediaType = "application/json";
+
+                // add cert 
+                Console.WriteLine("Request:");
+                Console.WriteLine(request.ToString());
+                Console.WriteLine("----------------------------------");
+                Console.WriteLine();
+
+                // create http client 
                 var cert = new X509Certificate2(X509Certificate2.CreateFromCertFile(CertPath));
 
                 var httpHandler = new HttpClientHandler();
@@ -137,12 +106,99 @@ namespace AmexSmApiClientTest
 
                 var httpClient = new HttpClient(httpHandler);
 
-                return httpClient;
+                // send the request
+                using (var response = await httpClient.SendAsync(request))
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    var status = $"{(int) response.StatusCode}-{response.ReasonPhrase}";
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        Console.WriteLine("Response:");
+                        Console.WriteLine($"Request to Amex SM API failed.");
+                        Console.WriteLine($"url:{url}");
+                        Console.WriteLine($"status:{status}");
+                        Console.WriteLine($"content:{content}");
+                        return false;
+                    }
+                    else
+                    {
+                        Console.WriteLine();
+                        Console.WriteLine();
+                        Console.WriteLine("Request to Amex SM API was successful!");
+                        return true;
+                    }
+
+                }
             }
             catch (Exception e)
             {
+                Console.WriteLine("Error occurred:");
                 Console.WriteLine(e);
-                throw;
+                return false;
+            }
+        }
+
+        public static async Task<bool> SendRequestToSmApiUsingWebClientAsync(string url, string resourcePath, string host, int port, string httpMethod, string payload, string nonce, string ts)
+        {
+            try
+            {
+                var cert = new X509Certificate2(X509Certificate2.CreateFromCertFile(CertPath));
+
+                var webRequest = HttpWebRequest.CreateHttp(url);
+                webRequest.ClientCertificates.Add(cert);
+
+                webRequest.ContentType = "application/json";
+             
+                // add headers to the request
+                webRequest.Headers.Add("x-amex-api-key", ClientKey);
+                webRequest.Headers.Add("x-amex-request-id", Guid.NewGuid().ToString());
+                webRequest.Headers.Add("origin", "https://test.rapidpay.com.au");
+
+                string macAuth = GenerateMacHeader(ClientKey, ClientSecret, resourcePath, host, port, httpMethod, payload, nonce, ts);
+                // string macAuth = GenerateMacTokenV2(url,httpMethod,payload, ClientKey, ClientSecret);
+
+                webRequest.Headers.Add("Authorization", macAuth);
+
+                webRequest.ContentType = "application/json";
+
+                // add cert 
+                Console.WriteLine("Request");
+                Console.WriteLine(webRequest.ToString());
+                Console.WriteLine("----------------------------------");
+                Console.WriteLine("Response:");
+
+                // send the request
+                using (var response = webRequest.GetResponse())
+                {
+                    var resStream = response.GetResponseStream();
+                    if (resStream == null)
+                    {
+                        Console.WriteLine("NO Response available");
+                        return false;
+                    }
+
+                    using (var sr = new StreamReader(resStream))
+                    {
+                        var content = await sr.ReadToEndAsync();
+
+                        var headers = $"{response.Headers.ToString()}";
+
+                        Console.WriteLine("Response headers:");
+                        Console.WriteLine(headers);
+
+                        Console.WriteLine();
+                        Console.WriteLine("Response content:");
+                        Console.WriteLine(content);
+                    }
+
+                    return true;
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Error occurred:");
+                Console.WriteLine(e);
+                return false;
             }
         }
     }
